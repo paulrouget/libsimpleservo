@@ -1,0 +1,12 @@
+[package]
+name = "libsimpleservo"
+version = "0.1.0"
+authors = ["Paul Rouget <me@paulrouget.com>"]
+
+[lib]
+name = "simpleservo"
+crate-type = ["dylib"]
+
+[dependencies]
+libservo = { git = "https://github.com/servo/servo", rev = "097cea240f" }
+libc = "0.2"
