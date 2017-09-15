@@ -19,12 +19,14 @@ use servo::style_traits::DevicePixel;
 use servo::style_traits::cursor::Cursor;
 use servo::msg::constellation_msg::{Key, KeyModifiers};use std::rc::Rc;
 
+use std::os::raw::c_char;
 
 #[no_mangle]
-pub extern "C" fn servo_version() -> *const i8 {
-    println!("rust: servo_version() called");
+pub extern "C" fn servo_version() -> *const c_char {
     let version = CString::new(servo::config::servo_version()).unwrap();
-    version.as_ptr()
+    let ptr = version.as_ptr();
+    std::mem::forget(version);
+    ptr
 }
 
 // extern fn init() -> {

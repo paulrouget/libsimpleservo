@@ -6,7 +6,7 @@ build = "build.rs"
 
 [lib]
 name = "simpleservo"
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 libservo = { git = "https://github.com/servo/servo", rev = "097cea240f" }
