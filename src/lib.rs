@@ -27,9 +27,6 @@ pub extern "C" fn servo_version() -> *const i8 {
     version.as_ptr()
 }
 
-
-
-
 // extern fn init() -> {
 //     let path = std::env::current_dir().unwrap().join("resources");
 //     if !path.exists() {

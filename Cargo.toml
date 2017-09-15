@@ -2,6 +2,7 @@
 name = "libsimpleservo"
 version = "0.1.0"
 authors = ["Paul Rouget <me@paulrouget.com>"]
+build = "build.rs"
 
 [lib]
 name = "simpleservo"
