@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 [dependencies]
 libservo = { git = "https://github.com/servo/servo", rev = "097cea240f" }
 libc = "0.2"
+core-foundation = "0.3"
