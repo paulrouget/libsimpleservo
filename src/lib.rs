@@ -99,6 +99,7 @@ pub extern "C" fn init() {
 
 }
 
+#[no_mangle]
 pub extern "C" fn ping() {
     SERVO.with(|s| {
         s.borrow_mut().as_mut().map(|servo| servo.handle_events(vec![]));
