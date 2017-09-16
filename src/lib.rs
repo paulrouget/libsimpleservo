@@ -82,7 +82,6 @@ pub extern "C" fn init() {
     let mut servo = servo::Servo::new(callbacks.clone());
 
     println!("PAUL 2");
-    
 
     let url = ServoUrl::parse("https://servo.org").unwrap();
     let (sender, receiver) = ipc::channel().unwrap();
@@ -149,7 +148,7 @@ impl WindowMethods for Callbacks {
 
     fn framebuffer_size(&self) -> TypedSize2D<u32, DevicePixel> {
         let (width, height) = (200, 200);
-        let scale_factor = 2; 
+        let scale_factor = 2;
         TypedSize2D::new(scale_factor * width, scale_factor * height)
     }
 
