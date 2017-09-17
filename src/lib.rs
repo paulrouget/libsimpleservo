@@ -43,7 +43,7 @@ pub extern "C" fn servo_version() -> *const c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn init() {
+pub extern "C" fn init(flush_cb: extern fn(), wakeup: extern fn(), width: u32, height: u32) {
 
     let gl = unsafe {
         gl::GlFns::load_with(|addr| {
@@ -73,30 +73,23 @@ pub extern "C" fn init() {
     opts::set_defaults(opts);
 
     let callbacks = Rc::new(Callbacks {
-        waker: Box::new(SimpleEventLoopWaker),
+        waker: Box::new(SimpleEventLoopWaker(wakeup)),
         gl: gl.clone(),
+        flush_cb,
+        size: (width, height),
     });
-
-    println!("PAUL 1");
 
     let mut servo = servo::Servo::new(callbacks.clone());
 
-    println!("PAUL 2");
-
-    let url = ServoUrl::parse("https://servo.org").unwrap();
+    let url = ServoUrl::parse("http://www.justinaguilar.com/animations/").unwrap();
     let (sender, receiver) = ipc::channel().unwrap();
     servo.handle_events(vec![WindowEvent::NewBrowser(url, sender)]);
     let browser_id = receiver.recv().unwrap();
     servo.handle_events(vec![WindowEvent::SelectBrowser(browser_id)]);
 
-    println!("PAUL 3");
-
     SERVO.with(|s| {
         *s.borrow_mut() = Some(servo);
     });
-
-    println!("PAUL 4");
-
 }
 
 #[no_mangle]
@@ -106,19 +99,22 @@ pub extern "C" fn ping() {
     });
 }
 
-pub struct SimpleEventLoopWaker;
+pub struct SimpleEventLoopWaker(extern fn());
 
 impl EventLoopWaker for SimpleEventLoopWaker {
     fn clone(&self) -> Box<EventLoopWaker + Send> {
-        Box::new(SimpleEventLoopWaker)
+        Box::new(SimpleEventLoopWaker(self.0))
     }
     fn wake(&self) {
+        (self.0)();
     }
 }
 
 struct Callbacks {
     waker: Box<EventLoopWaker>,
     gl: Rc<gl::Gl>,
+    flush_cb: extern fn(),
+    size: (u32, u32),
 }
 
 impl WindowMethods for Callbacks {
@@ -127,7 +123,7 @@ impl WindowMethods for Callbacks {
     }
 
     fn present(&self) {
-        // FIXME
+        (self.flush_cb)();
     }
 
     fn supports_clipboard(&self) -> bool {
@@ -148,9 +144,8 @@ impl WindowMethods for Callbacks {
     }
 
     fn framebuffer_size(&self) -> TypedSize2D<u32, DevicePixel> {
-        let (width, height) = (200, 200);
         let scale_factor = 2;
-        TypedSize2D::new(scale_factor * width, scale_factor * height)
+        TypedSize2D::new(scale_factor * self.size.0, scale_factor * self.size.1)
     }
 
     fn window_rect(&self) -> TypedRect<u32, DevicePixel> {
@@ -158,14 +153,11 @@ impl WindowMethods for Callbacks {
     }
 
     fn size(&self) -> TypedSize2D<f32, DeviceIndependentPixel> {
-        let (width, height) = (200, 200);
-        TypedSize2D::new(width as f32, height as f32)
+        TypedSize2D::new(self.size.0 as f32, self.size.1 as f32)
     }
 
     fn client_window(&self, _id: BrowserId) -> (Size2D<u32>, Point2D<i32>) {
-        let (width, height) = (200, 200);
-        let (x, y) = (0.0, 0.0);
-        (Size2D::new(width, height), Point2D::new(x as i32, y as i32))
+        (Size2D::new(self.size.0, self.size.1), Point2D::new(0, 0))
     }
 
     fn allow_navigation(&self, _id: BrowserId, _url: ServoUrl, chan: ipc::IpcSender<bool>) { chan.send(true).ok(); }
