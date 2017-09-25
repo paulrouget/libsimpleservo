@@ -1,5 +1,5 @@
 extern crate servo;
-extern crate core_foundation;
+// extern crate core_foundation;
 
 use std::ffi::CString;
 use servo::gl;
@@ -20,9 +20,9 @@ use servo::style_traits::DevicePixel;
 use servo::style_traits::cursor::Cursor;
 use servo::msg::constellation_msg::{Key, KeyModifiers};use std::rc::Rc;
 
-use core_foundation::base::TCFType;
-use core_foundation::string::CFString;
-use core_foundation::bundle::{CFBundleGetBundleWithIdentifier, CFBundleGetFunctionPointerForName};
+// use core_foundation::base::TCFType;
+// use core_foundation::string::CFString;
+// use core_foundation::bundle::{CFBundleGetBundleWithIdentifier, CFBundleGetFunctionPointerForName};
 
 use std::os::raw::c_char;
 use std::os::raw::c_void;
@@ -45,51 +45,51 @@ pub extern "C" fn servo_version() -> *const c_char {
 #[no_mangle]
 pub extern "C" fn init(flush_cb: extern fn(), wakeup: extern fn(), width: u32, height: u32) {
 
-    let gl = unsafe {
-        gl::GlFns::load_with(|addr| {
-            let symbol_name: CFString = str::FromStr::from_str(addr).unwrap();
-            let framework_name: CFString = str::FromStr::from_str("com.apple.opengl").unwrap();
-            let framework = CFBundleGetBundleWithIdentifier(framework_name.as_concrete_TypeRef());
-            let symbol = CFBundleGetFunctionPointerForName(framework, symbol_name.as_concrete_TypeRef());
-            symbol as *const c_void
-        })
-    };
+    // let gl = unsafe {
+    //     gl::GlFns::load_with(|addr| {
+    //         let symbol_name: CFString = str::FromStr::from_str(addr).unwrap();
+    //         let framework_name: CFString = str::FromStr::from_str("com.apple.opengl").unwrap();
+    //         let framework = CFBundleGetBundleWithIdentifier(framework_name.as_concrete_TypeRef());
+    //         let symbol = CFBundleGetFunctionPointerForName(framework, symbol_name.as_concrete_TypeRef());
+    //         symbol as *const c_void
+    //     })
+    // };
 
-    gl.clear_color(0.0, 1.0, 0.0, 1.0);
-    gl.clear(gl::COLOR_BUFFER_BIT);
-    gl.finish();
+    // gl.clear_color(0.0, 1.0, 0.0, 1.0);
+    // gl.clear(gl::COLOR_BUFFER_BIT);
+    // gl.finish();
 
-    // Maybe we run from an app bundle
-    let p = std::env::current_exe().unwrap();
-    let p = p.parent().unwrap();
-    let p = p.parent().unwrap().join("Resources");
-    if !p.exists() {
-        panic!("Can't file resources directory: {}", p.to_str().unwrap());
-    }
-    let path = p.to_str().unwrap().to_string();
-    set_resources_path(Some(path));
+    // // Maybe we run from an app bundle
+    // let p = std::env::current_exe().unwrap();
+    // let p = p.parent().unwrap();
+    // let p = p.parent().unwrap().join("Resources");
+    // if !p.exists() {
+    //     panic!("Can't file resources directory: {}", p.to_str().unwrap());
+    // }
+    // let path = p.to_str().unwrap().to_string();
+    // set_resources_path(Some(path));
 
-    let opts = opts::default_opts();
-    opts::set_defaults(opts);
+    // let opts = opts::default_opts();
+    // opts::set_defaults(opts);
 
-    let callbacks = Rc::new(Callbacks {
-        waker: Box::new(SimpleEventLoopWaker(wakeup)),
-        gl: gl.clone(),
-        flush_cb,
-        size: (width, height),
-    });
+    // let callbacks = Rc::new(Callbacks {
+    //     waker: Box::new(SimpleEventLoopWaker(wakeup)),
+    //     gl: gl.clone(),
+    //     flush_cb,
+    //     size: (width, height),
+    // });
 
-    let mut servo = servo::Servo::new(callbacks.clone());
+    // let mut servo = servo::Servo::new(callbacks.clone());
 
-    let url = ServoUrl::parse("http://www.justinaguilar.com/animations/").unwrap();
-    let (sender, receiver) = ipc::channel().unwrap();
-    servo.handle_events(vec![WindowEvent::NewBrowser(url, sender)]);
-    let browser_id = receiver.recv().unwrap();
-    servo.handle_events(vec![WindowEvent::SelectBrowser(browser_id)]);
+    // let url = ServoUrl::parse("https://www.xamarin.com/forms").unwrap();
+    // let (sender, receiver) = ipc::channel().unwrap();
+    // servo.handle_events(vec![WindowEvent::NewBrowser(url, sender)]);
+    // let browser_id = receiver.recv().unwrap();
+    // servo.handle_events(vec![WindowEvent::SelectBrowser(browser_id)]);
 
-    SERVO.with(|s| {
-        *s.borrow_mut() = Some(servo);
-    });
+    // SERVO.with(|s| {
+    //     *s.borrow_mut() = Some(servo);
+    // });
 }
 
 #[no_mangle]
