@@ -15,13 +15,13 @@ export RUSTFLAGS=' -C target-feature=+neon -W unused-extern-crates'
 export OPENSSL_VERSION='1.0.2k'
 export ANDROID_SDK='/Users/paul/Library/Android/sdk'
 export ANDROID_NDK_ROOT='/Users/paul/Desktop/android-ndk-r12b'
-export OPENSSL_INCLUDE_DIR='/Users/paul/git/servo/target/armv7-linux-androideabi/debug/native/openssl/openssl-1.0.2k/include'
+export OPENSSL_INCLUDE_DIR='/Users/paul/git/servo/target/armv7-linux-androideabi/release/native/openssl/openssl-1.0.2k/include'
 export NDK_ANDROID_VERSION='18'
 export NDK_HOME='/Users/paul/Desktop/android-ndk-r12b'
 export CFLAGS='--sysroot /Users/paul/Desktop/android-ndk-r12b/platforms/android-18/arch-arm -I/Users/paul/Desktop/android-ndk-r12b/sources/android/support/include'
 export CMAKE_ANDROID_ARCH_ABI='armeabi-v7a'
 export ANDROID_SYSROOT='/Users/paul/Desktop/android-ndk-r12b/platforms/android-18/arch-arm'
-export OPENSSL_LIB_DIR='/Users/paul/git/servo/target/armv7-linux-androideabi/debug/native/openssl/openssl-1.0.2k'
+export OPENSSL_LIB_DIR='/Users/paul/git/servo/target/armv7-linux-androideabi/release/native/openssl/openssl-1.0.2k'
 export RUST_TARGET='armv7-linux-androideabi'
 
-cargo build --target armv7-linux-androideabi
+cargo build --release --target armv7-linux-androideabi

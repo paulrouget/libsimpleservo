@@ -34,5 +34,5 @@ call_gcc()
 
   "${ANDROID_TOOLCHAIN}/${_ANDROID_EABI}-gcc" \
     --sysroot="${ANDROID_SYSROOT}" -L "${ANDROID_CXX_LIBS}" ${_GCC_PARAMS} -lc++ \
-    -o "${TARGET_DIR}/libservo.so" -shared && touch "${TARGET_DIR}/servo"
+    -o "${TARGET_DIR}/libsimpleservo.so" -shared && touch "${TARGET_DIR}/libsimpleservo"
 }
