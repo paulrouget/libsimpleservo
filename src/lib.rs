@@ -1,37 +1,28 @@
 extern crate servo;
-// extern crate core_foundation;
-
-use std::ffi::CString;
-use servo::gl;
 
 use servo::BrowserId;
 use servo::Servo;
-use servo::servo_config::resource_files::set_resources_path;
-use servo::servo_config::opts;
 use servo::compositing::compositor_thread::EventLoopWaker;
 use servo::compositing::windowing::{WindowEvent, WindowMethods};
 use servo::euclid::{Point2D, ScaleFactor, Size2D, TypedPoint2D, TypedRect, TypedSize2D};
+use servo::gl;
 use servo::ipc_channel::ipc;
+use servo::msg::constellation_msg::{Key, KeyModifiers};use std::rc::Rc;
 use servo::net_traits::net_error_list::NetError;
 use servo::script_traits::LoadData;
+use servo::servo_config::opts;
+use servo::servo_config::resource_files::set_resources_path;
 use servo::servo_geometry::DeviceIndependentPixel;
 use servo::servo_url::ServoUrl;
 use servo::style_traits::DevicePixel;
 use servo::style_traits::cursor::Cursor;
-use servo::msg::constellation_msg::{Key, KeyModifiers};use std::rc::Rc;
-
-// use core_foundation::base::TCFType;
-// use core_foundation::string::CFString;
-// use core_foundation::bundle::{CFBundleGetBundleWithIdentifier, CFBundleGetFunctionPointerForName};
-
+use std::cell::RefCell;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::os::raw::c_void;
-use std::str;
-
-use std::cell::RefCell;
 
 thread_local! {
-    static SERVO: RefCell<Option<Servo<Callbacks>>> = RefCell::new(None);
+    static SERVO: RefCell<Option<(Servo<Callbacks>,BrowserId)>> = RefCell::new(None);
 }
 
 #[no_mangle]
@@ -43,59 +34,74 @@ pub extern "C" fn servo_version() -> *const c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn init(flush_cb: extern fn(), wakeup: extern fn(), width: u32, height: u32) {
+pub extern "C" fn init(
+    get_proc_address: extern fn(*const c_char) -> *const c_void,
+    flush_cb: extern fn(),
+    wakeup: extern fn(),
+    width: u32, height: u32) {
 
-    // let gl = unsafe {
-    //     gl::GlFns::load_with(|addr| {
-    //         let symbol_name: CFString = str::FromStr::from_str(addr).unwrap();
-    //         let framework_name: CFString = str::FromStr::from_str("com.apple.opengl").unwrap();
-    //         let framework = CFBundleGetBundleWithIdentifier(framework_name.as_concrete_TypeRef());
-    //         let symbol = CFBundleGetFunctionPointerForName(framework, symbol_name.as_concrete_TypeRef());
-    //         symbol as *const c_void
-    //     })
-    // };
+    let gl = unsafe {
+        gl::GlFns::load_with(|sym| {
+            let sym = CString::new(sym).unwrap();
+            get_proc_address(sym.as_ptr())
+        })
+    };
 
-    // gl.clear_color(0.0, 1.0, 0.0, 1.0);
-    // gl.clear(gl::COLOR_BUFFER_BIT);
-    // gl.finish();
+    gl.clear_color(0.0, 1.0, 0.0, 1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT);
+    gl.finish();
 
-    // // Maybe we run from an app bundle
-    // let p = std::env::current_exe().unwrap();
-    // let p = p.parent().unwrap();
-    // let p = p.parent().unwrap().join("Resources");
-    // if !p.exists() {
-    //     panic!("Can't file resources directory: {}", p.to_str().unwrap());
-    // }
-    // let path = p.to_str().unwrap().to_string();
-    // set_resources_path(Some(path));
+    // Maybe we run from an app bundle
+    let p = std::env::current_exe().unwrap();
+    let p = p.parent().unwrap();
+    let p = p.parent().unwrap().join("Resources");
+    if !p.exists() {
+        panic!("Can't file resources directory: {}", p.to_str().unwrap());
+    }
+    let path = p.to_str().unwrap().to_string();
+    set_resources_path(Some(path));
 
-    // let opts = opts::default_opts();
-    // opts::set_defaults(opts);
+    let opts = opts::default_opts();
+    opts::set_defaults(opts);
 
-    // let callbacks = Rc::new(Callbacks {
-    //     waker: Box::new(SimpleEventLoopWaker(wakeup)),
-    //     gl: gl.clone(),
-    //     flush_cb,
-    //     size: (width, height),
-    // });
+    let callbacks = Rc::new(Callbacks {
+        waker: Box::new(SimpleEventLoopWaker(wakeup)),
+        gl: gl.clone(),
+        flush_cb,
+        size: (width, height),
+    });
 
-    // let mut servo = servo::Servo::new(callbacks.clone());
+    let mut servo = servo::Servo::new(callbacks.clone());
 
-    // let url = ServoUrl::parse("https://www.xamarin.com/forms").unwrap();
-    // let (sender, receiver) = ipc::channel().unwrap();
-    // servo.handle_events(vec![WindowEvent::NewBrowser(url, sender)]);
-    // let browser_id = receiver.recv().unwrap();
-    // servo.handle_events(vec![WindowEvent::SelectBrowser(browser_id)]);
+    let url = ServoUrl::parse("https://www.xamarin.com/forms").unwrap();
+    let (sender, receiver) = ipc::channel().unwrap();
+    servo.handle_events(vec![WindowEvent::NewBrowser(url, sender)]);
+    let browser_id = receiver.recv().unwrap();
+    servo.handle_events(vec![WindowEvent::SelectBrowser(browser_id)]);
 
-    // SERVO.with(|s| {
-    //     *s.borrow_mut() = Some(servo);
-    // });
+    SERVO.with(|s| {
+        *s.borrow_mut() = Some((servo, browser_id));
+    });
 }
 
 #[no_mangle]
 pub extern "C" fn ping() {
     SERVO.with(|s| {
-        s.borrow_mut().as_mut().map(|servo| servo.handle_events(vec![]));
+        s.borrow_mut().as_mut().map(|&mut (ref mut s, _)| s.handle_events(vec![]));
+    });
+}
+
+#[no_mangle]
+pub extern "C" fn loadurl(url: *const c_char) {
+    SERVO.with(|s| {
+        let url = unsafe { CStr::from_ptr(url) };
+        if let Ok(url) = url.to_str() {
+            if let Ok(url) = ServoUrl::parse(url) {
+                s.borrow_mut().as_mut().map(|&mut (ref mut servo, id)| {
+                    servo.handle_events(vec![WindowEvent::LoadUrl(id,url)]);
+                });
+            }
+        }
     });
 }
 
