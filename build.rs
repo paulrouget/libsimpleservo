@@ -2,16 +2,22 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+extern crate gl_generator;
+
+use gl_generator::{Registry, Api, Profile, Fallbacks};
 use std::env;
+use std::fs::File;
 use std::path::Path;
 use std::process;
 use std::process::{Command, Stdio};
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+
     // build.rs is not platform-specific, so we have to check the target here.
     let target = env::var("TARGET").unwrap();
     if target.contains("android") {
-        android_main()
+        android_main();
     }
 }
 
@@ -19,7 +25,7 @@ fn android_main() {
     // Get the NDK path from NDK_HOME env.
     let ndk_path = env::var("ANDROID_NDK").ok().expect("Please set the ANDROID_NDK environment variable");
     let ndk_path = Path::new(&ndk_path);
-    
+
     // Build up the path to the NDK compilers
     // Options for host are:  "linux-x86_64" "linux-x86" "darwin-x86_64" "darwin-x86"
     // per: https://android.googlesource.com/platform/ndk/+/ics-mr0/docs/STANDALONE-TOOLCHAIN.html
@@ -97,4 +103,23 @@ fn android_main() {
     println!("cargo:rustc-link-search=native={}", out_dir);
     println!("cargo:rustc-link-lib=log");
     println!("cargo:rustc-link-lib=android");
+
+    // Create EGL bindings
+
+    let mut file = File::create(&directory.join("egl_bindings.rs")).unwrap();
+    Registry::new(Api::Egl, (1, 5), Profile::Core, Fallbacks::All, [
+                  "EGL_KHR_create_context",
+                  "EGL_EXT_create_context_robustness",
+                  "EGL_KHR_create_context_no_error",
+                  "EGL_KHR_platform_x11",
+                  "EGL_KHR_platform_android",
+                  "EGL_KHR_platform_wayland",
+                  "EGL_KHR_platform_gbm",
+                  "EGL_EXT_platform_base",
+                  "EGL_EXT_platform_x11",
+                  "EGL_MESA_platform_gbm",
+                  "EGL_EXT_platform_wayland",
+                  "EGL_EXT_platform_device",
+    ]).write_bindings(gl_generator::StaticStructGenerator, &mut file).unwrap();
+    
 }

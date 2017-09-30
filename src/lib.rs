@@ -1,3 +1,4 @@
+extern crate libc;
 extern crate servo;
 
 use servo::BrowserId;
@@ -19,7 +20,35 @@ use servo::style_traits::cursor::Cursor;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::os::raw::c_void;
+
+// FIXME: maybe us rust-egl?
+pub mod egl {
+    pub type khronos_utime_nanoseconds_t = super::khronos_utime_nanoseconds_t;
+    pub type khronos_uint64_t = super::khronos_uint64_t;
+    pub type khronos_ssize_t = super::khronos_ssize_t;
+    pub type EGLNativeDisplayType = super::EGLNativeDisplayType;
+    pub type EGLNativePixmapType = super::EGLNativePixmapType;
+    pub type EGLNativeWindowType = super::EGLNativeWindowType;
+    pub type EGLint = super::EGLint;
+    pub type NativeDisplayType = super::EGLNativeDisplayType;
+    pub type NativePixmapType = super::EGLNativePixmapType;
+    pub type NativeWindowType = super::EGLNativeWindowType;
+    include!(concat!(env!("OUT_DIR"), "/egl_bindings.rs"));
+}
+pub type khronos_utime_nanoseconds_t = khronos_uint64_t;
+pub type khronos_uint64_t = libc::uint64_t;
+pub type khronos_ssize_t = libc::c_long;
+pub type EGLint = libc::int32_t;
+pub type EGLNativeDisplayType = *const libc::c_void;
+pub type EGLNativePixmapType = *const libc::c_void;     // FIXME: egl_native_pixmap_t instead
+#[cfg(target_os = "windows")]
+pub type EGLNativeWindowType = winapi::HWND;
+#[cfg(target_os = "linux")]
+pub type EGLNativeWindowType = *const libc::c_void;
+#[cfg(target_os = "android")]
+pub type EGLNativeWindowType = *const libc::c_void;
+#[cfg(any(target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd"))]
+pub type EGLNativeWindowType = *const libc::c_void;
 
 thread_local! {
     static SERVO: RefCell<Option<(Servo<Callbacks>,BrowserId)>> = RefCell::new(None);
@@ -34,40 +63,51 @@ pub extern "C" fn servo_version() -> *const c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn init(
-    get_proc_address: extern fn(*const c_char) -> *const c_void,
-    flush_cb: extern fn(),
-    wakeup: extern fn(),
-    width: u32, height: u32) {
+pub extern "C" fn test() {
 
     let gl = unsafe {
-        gl::GlFns::load_with(|sym| {
-            let sym = CString::new(sym).unwrap();
-            get_proc_address(sym.as_ptr())
+        gl::GlFns::load_with(|addr| {
+            let addr = CString::new(addr.as_bytes()).unwrap();
+            let addr = addr.as_ptr();
+            egl::Egl::GetProcAddress(&egl::Egl, addr) as *const _
         })
     };
 
     gl.clear_color(0.0, 1.0, 0.0, 1.0);
     gl.clear(gl::COLOR_BUFFER_BIT);
     gl.finish();
+}
 
-    // Maybe we run from an app bundle
-    let p = std::env::current_exe().unwrap();
-    let p = p.parent().unwrap();
-    let p = p.parent().unwrap().join("Resources");
-    if !p.exists() {
-        panic!("Can't file resources directory: {}", p.to_str().unwrap());
-    }
-    let path = p.to_str().unwrap().to_string();
-    set_resources_path(Some(path));
+#[no_mangle]
+pub extern "C" fn init(
+    wakeup: extern fn(),
+    // flush_cb: extern fn(),
+    resources_path: *const c_char,
+    width: u32, height: u32) {
+
+    let resources_path = unsafe { CStr::from_ptr(resources_path) };
+    let resources_path = resources_path.to_str().unwrap().to_owned();
+    set_resources_path(Some(resources_path));
 
     let opts = opts::default_opts();
     opts::set_defaults(opts);
 
+    let gl = unsafe {
+        gl::GlFns::load_with(|addr| {
+            let addr = CString::new(addr.as_bytes()).unwrap();
+            let addr = addr.as_ptr();
+            egl::Egl::GetProcAddress(&egl::Egl, addr) as *const _
+        })
+    };
+
+    // gl.clear_color(0.0, 1.0, 0.0, 1.0);
+    // gl.clear(gl::COLOR_BUFFER_BIT);
+    // gl.finish();
+
     let callbacks = Rc::new(Callbacks {
         waker: Box::new(SimpleEventLoopWaker(wakeup)),
         gl: gl.clone(),
-        flush_cb,
+        // flush_cb,
         size: (width, height),
     });
 
@@ -85,7 +125,7 @@ pub extern "C" fn init(
 }
 
 #[no_mangle]
-pub extern "C" fn ping() {
+pub extern "C" fn onEventLoopAwakenByServo() {
     SERVO.with(|s| {
         s.borrow_mut().as_mut().map(|&mut (ref mut s, _)| s.handle_events(vec![]));
     });
@@ -119,7 +159,7 @@ impl EventLoopWaker for SimpleEventLoopWaker {
 struct Callbacks {
     waker: Box<EventLoopWaker>,
     gl: Rc<gl::Gl>,
-    flush_cb: extern fn(),
+    // flush_cb: extern fn(),
     size: (u32, u32),
 }
 
@@ -129,7 +169,16 @@ impl WindowMethods for Callbacks {
     }
 
     fn present(&self) {
-        (self.flush_cb)();
+        unsafe {
+            let display = egl::Egl::GetDisplay(&egl::Egl, egl::DEFAULT_DISPLAY as *mut _);
+            if display.is_null() {
+                panic!("Can't get display");
+            }
+            let surface  = egl::Egl::GetCurrentSurface(&egl::Egl, 0x3059 /*egl::READ*/);
+
+            egl::Egl::SwapBuffers(&egl::Egl, display, surface);
+            // (self.flush_cb)();
+        }
     }
 
     fn supports_clipboard(&self) -> bool {
