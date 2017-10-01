@@ -2,11 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-extern crate gl_generator;
-
-use gl_generator::{Registry, Api, Profile, Fallbacks};
 use std::env;
-use std::fs::File;
 use std::path::Path;
 use std::process;
 use std::process::{Command, Stdio};
@@ -103,23 +99,4 @@ fn android_main() {
     println!("cargo:rustc-link-search=native={}", out_dir);
     println!("cargo:rustc-link-lib=log");
     println!("cargo:rustc-link-lib=android");
-
-    // Create EGL bindings
-
-    let mut file = File::create(&directory.join("egl_bindings.rs")).unwrap();
-    Registry::new(Api::Egl, (1, 5), Profile::Core, Fallbacks::All, [
-                  "EGL_KHR_create_context",
-                  "EGL_EXT_create_context_robustness",
-                  "EGL_KHR_create_context_no_error",
-                  "EGL_KHR_platform_x11",
-                  "EGL_KHR_platform_android",
-                  "EGL_KHR_platform_wayland",
-                  "EGL_KHR_platform_gbm",
-                  "EGL_EXT_platform_base",
-                  "EGL_EXT_platform_x11",
-                  "EGL_MESA_platform_gbm",
-                  "EGL_EXT_platform_wayland",
-                  "EGL_EXT_platform_device",
-    ]).write_bindings(gl_generator::StaticStructGenerator, &mut file).unwrap();
-    
 }

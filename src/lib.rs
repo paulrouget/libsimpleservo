@@ -1,4 +1,8 @@
-extern crate libc;
+#[link(name = "EGL")]
+#[link(name = "GLESv2")]
+extern {}
+
+extern crate egl;
 extern crate servo;
 
 use servo::BrowserId;
@@ -19,36 +23,7 @@ use servo::style_traits::DevicePixel;
 use servo::style_traits::cursor::Cursor;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-
-// FIXME: maybe us rust-egl?
-pub mod egl {
-    pub type khronos_utime_nanoseconds_t = super::khronos_utime_nanoseconds_t;
-    pub type khronos_uint64_t = super::khronos_uint64_t;
-    pub type khronos_ssize_t = super::khronos_ssize_t;
-    pub type EGLNativeDisplayType = super::EGLNativeDisplayType;
-    pub type EGLNativePixmapType = super::EGLNativePixmapType;
-    pub type EGLNativeWindowType = super::EGLNativeWindowType;
-    pub type EGLint = super::EGLint;
-    pub type NativeDisplayType = super::EGLNativeDisplayType;
-    pub type NativePixmapType = super::EGLNativePixmapType;
-    pub type NativeWindowType = super::EGLNativeWindowType;
-    include!(concat!(env!("OUT_DIR"), "/egl_bindings.rs"));
-}
-pub type khronos_utime_nanoseconds_t = khronos_uint64_t;
-pub type khronos_uint64_t = libc::uint64_t;
-pub type khronos_ssize_t = libc::c_long;
-pub type EGLint = libc::int32_t;
-pub type EGLNativeDisplayType = *const libc::c_void;
-pub type EGLNativePixmapType = *const libc::c_void;     // FIXME: egl_native_pixmap_t instead
-#[cfg(target_os = "windows")]
-pub type EGLNativeWindowType = winapi::HWND;
-#[cfg(target_os = "linux")]
-pub type EGLNativeWindowType = *const libc::c_void;
-#[cfg(target_os = "android")]
-pub type EGLNativeWindowType = *const libc::c_void;
-#[cfg(any(target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd"))]
-pub type EGLNativeWindowType = *const libc::c_void;
+use std::os::raw::{c_char, c_void};
 
 thread_local! {
     static SERVO: RefCell<Option<(Servo<Callbacks>,BrowserId)>> = RefCell::new(None);
@@ -60,22 +35,6 @@ pub extern "C" fn servo_version() -> *const c_char {
     let ptr = version.as_ptr();
     std::mem::forget(version);
     ptr
-}
-
-#[no_mangle]
-pub extern "C" fn test() {
-
-    let gl = unsafe {
-        gl::GlFns::load_with(|addr| {
-            let addr = CString::new(addr.as_bytes()).unwrap();
-            let addr = addr.as_ptr();
-            egl::Egl::GetProcAddress(&egl::Egl, addr) as *const _
-        })
-    };
-
-    gl.clear_color(0.0, 1.0, 0.0, 1.0);
-    gl.clear(gl::COLOR_BUFFER_BIT);
-    gl.finish();
 }
 
 #[no_mangle]
@@ -94,9 +53,7 @@ pub extern "C" fn init(
 
     let gl = unsafe {
         gl::GlFns::load_with(|addr| {
-            let addr = CString::new(addr.as_bytes()).unwrap();
-            let addr = addr.as_ptr();
-            egl::Egl::GetProcAddress(&egl::Egl, addr) as *const _
+            egl::get_proc_address(addr) as *const c_void
         })
     };
 
@@ -125,14 +82,14 @@ pub extern "C" fn init(
 }
 
 #[no_mangle]
-pub extern "C" fn onEventLoopAwakenByServo() {
+pub extern "C" fn on_event_loop_awaken_by_servo() {
     SERVO.with(|s| {
         s.borrow_mut().as_mut().map(|&mut (ref mut s, _)| s.handle_events(vec![]));
     });
 }
 
 #[no_mangle]
-pub extern "C" fn loadurl(url: *const c_char) {
+pub extern "C" fn load_url(url: *const c_char) {
     SERVO.with(|s| {
         let url = unsafe { CStr::from_ptr(url) };
         if let Ok(url) = url.to_str() {
@@ -169,15 +126,14 @@ impl WindowMethods for Callbacks {
     }
 
     fn present(&self) {
-        unsafe {
-            let display = egl::Egl::GetDisplay(&egl::Egl, egl::DEFAULT_DISPLAY as *mut _);
-            if display.is_null() {
-                panic!("Can't get display");
+        let display = egl::get_current_display();
+        let surface = egl::get_current_surface(egl::EGL_DRAW);
+        if let (Some(display), Some(surface)) = (display, surface) {
+            if !egl::swap_buffers(display, surface) {
+                // FIXME
             }
-            let surface  = egl::Egl::GetCurrentSurface(&egl::Egl, 0x3059 /*egl::READ*/);
-
-            egl::Egl::SwapBuffers(&egl::Egl, display, surface);
-            // (self.flush_cb)();
+        } else {
+            // FIXME
         }
     }
 
