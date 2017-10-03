@@ -1,8 +1,13 @@
-#[link(name = "EGL")]
-#[link(name = "GLESv2")]
-extern {}
+// #[link(name = "EGL")]
+// #[link(name = "GLESv3")]
+// extern {}
 
-extern crate egl;
+extern crate libc;
+
+#[macro_use]
+extern crate log;
+
+// extern crate egl;
 extern crate servo;
 
 use servo::BrowserId;
@@ -16,7 +21,7 @@ use servo::msg::constellation_msg::{Key, KeyModifiers};use std::rc::Rc;
 use servo::net_traits::net_error_list::NetError;
 use servo::script_traits::LoadData;
 use servo::servo_config::opts;
-use servo::servo_config::resource_files::set_resources_path;
+use servo::servo_config::resource_files::{set_resources_path, resources_dir_path};
 use servo::servo_geometry::DeviceIndependentPixel;
 use servo::servo_url::ServoUrl;
 use servo::style_traits::DevicePixel;
@@ -25,52 +30,82 @@ use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 
+mod egl {
+    pub type khronos_utime_nanoseconds_t = super::khronos_utime_nanoseconds_t;
+    pub type khronos_uint64_t = super::khronos_uint64_t;
+    pub type khronos_ssize_t = super::khronos_ssize_t;
+    pub type EGLNativeDisplayType = super::EGLNativeDisplayType;
+    pub type EGLNativePixmapType = super::EGLNativePixmapType;
+    pub type EGLNativeWindowType = super::EGLNativeWindowType;
+    pub type EGLint = super::EGLint;
+    pub type NativeDisplayType = super::EGLNativeDisplayType;
+    pub type NativePixmapType = super::EGLNativePixmapType;
+    pub type NativeWindowType = super::EGLNativeWindowType;
+
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
+}
+pub type khronos_utime_nanoseconds_t = khronos_uint64_t;
+pub type khronos_uint64_t = libc::uint64_t;
+pub type khronos_ssize_t = libc::c_long;
+pub type EGLint = libc::int32_t;
+pub type EGLNativeDisplayType = *const libc::c_void;
+pub type EGLNativePixmapType = *const libc::c_void;     // FIXME: egl_native_pixmap_t instead
+
+#[cfg(target_os = "windows")]
+pub type EGLNativeWindowType = winapi::HWND;
+#[cfg(target_os = "linux")]
+pub type EGLNativeWindowType = *const libc::c_void;
+#[cfg(target_os = "android")]
+pub type EGLNativeWindowType = *const libc::c_void;
+#[cfg(any(target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd"))]
+pub type EGLNativeWindowType = *const libc::c_void;
+
 thread_local! {
     static SERVO: RefCell<Option<(Servo<Callbacks>,BrowserId)>> = RefCell::new(None);
 }
 
 #[no_mangle]
 pub extern "C" fn servo_version() -> *const c_char {
-    let version = CString::new(servo::config::servo_version()).unwrap();
-    let ptr = version.as_ptr();
-    std::mem::forget(version);
+    let servo_version = servo::config::servo_version();
+    let text = CString::new(format!("{}", servo_version)).unwrap();
+    let ptr = text.as_ptr();
+    std::mem::forget(text);
     ptr
 }
 
 #[no_mangle]
-pub extern "C" fn init(
-    wakeup: extern fn(),
-    // flush_cb: extern fn(),
-    resources_path: *const c_char,
-    width: u32, height: u32) {
+pub extern "C" fn init(wakeup: extern fn(), log_external: extern fn(*const c_char), width: u32, height: u32) {
 
-    let resources_path = unsafe { CStr::from_ptr(resources_path) };
-    let resources_path = resources_path.to_str().unwrap().to_owned();
-    set_resources_path(Some(resources_path));
+    let _ = Logger::init(log_external);
+
+    set_resources_path(Some("/sdcard/servo/resources/".to_owned()));
 
     let opts = opts::default_opts();
     opts::set_defaults(opts);
 
+    let e = egl::Egl;
     let gl = unsafe {
-        gl::GlFns::load_with(|addr| {
-            egl::get_proc_address(addr) as *const c_void
+        gl::GlesFns::load_with(|addr| {
+            let addr = CString::new(addr.as_bytes()).unwrap();
+            let addr = addr.as_ptr();
+            e.GetProcAddress(addr) as *const c_void
         })
     };
 
-    // gl.clear_color(0.0, 1.0, 0.0, 1.0);
-    // gl.clear(gl::COLOR_BUFFER_BIT);
-    // gl.finish();
+    gl.clear_color(0.0, 1.0, 0.0, 1.0);
+    gl.clear(gl::COLOR_BUFFER_BIT);
+    gl.finish();
 
     let callbacks = Rc::new(Callbacks {
         waker: Box::new(SimpleEventLoopWaker(wakeup)),
         gl: gl.clone(),
-        // flush_cb,
         size: (width, height),
     });
 
     let mut servo = servo::Servo::new(callbacks.clone());
 
-    let url = ServoUrl::parse("https://www.xamarin.com/forms").unwrap();
+    let url = ServoUrl::parse("https://servo.org").unwrap();
     let (sender, receiver) = ipc::channel().unwrap();
     servo.handle_events(vec![WindowEvent::NewBrowser(url, sender)]);
     let browser_id = receiver.recv().unwrap();
@@ -126,15 +161,12 @@ impl WindowMethods for Callbacks {
     }
 
     fn present(&self) {
-        let display = egl::get_current_display();
-        let surface = egl::get_current_surface(egl::EGL_DRAW);
-        if let (Some(display), Some(surface)) = (display, surface) {
-            if !egl::swap_buffers(display, surface) {
-                // FIXME
-            }
-        } else {
-            // FIXME
-        }
+        // let e = egl::Egl;
+        // unsafe {
+        //     let display = e.GetCurrentDisplay();
+        //     let surface = e.GetCurrentSurface(egl::DRAW as EGLint);
+        //     e.SwapBuffers(display, surface);
+        // }
     }
 
     fn supports_clipboard(&self) -> bool {
@@ -185,4 +217,34 @@ impl WindowMethods for Callbacks {
     fn set_cursor(&self, _cursor: Cursor) { }
     fn set_favicon(&self, _id: BrowserId, _url: ServoUrl) {}
     fn handle_key(&self, _id: Option<BrowserId>, _ch: Option<char>, _key: Key, _mods: KeyModifiers) { }
+}
+
+
+
+use log::{set_logger, Log, LogRecord, LogMetadata, LogLevelFilter, LogLevel};
+
+struct Logger(extern fn(*const c_char));
+
+impl Logger {
+    pub fn init(callback: extern fn(*const c_char)) {
+        set_logger(|max_log_level| {
+            max_log_level.set(LogLevelFilter::Info);
+            Box::new(Logger(callback))
+        });
+    }
+}
+
+impl Log for Logger {
+    fn enabled(&self, metadata: &LogMetadata) -> bool {
+        metadata.level() <= LogLevel::Info
+    }
+
+    fn log(&self, record: &LogRecord) {
+        if self.enabled(record.metadata()) {
+            let msg = format!("LOG: [{}] [{}] [{}]", record.level(), record.args(), record.target());
+            let text = CString::new(msg.to_owned()).unwrap();
+            let ptr = text.as_ptr();
+            self.0(ptr);
+        }
+    }
 }
